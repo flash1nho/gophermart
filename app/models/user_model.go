@@ -3,11 +3,14 @@ package models
 import (
 	  "context"
 	  "errors"
+	  "time"
+	  "fmt"
 
 		"github.com/jackc/pgx/v5/pgxpool"
     "github.com/jackc/pgx/v5/pgconn"
     "github.com/jackc/pgerrcode"
 		"golang.org/x/crypto/bcrypt"
+		"github.com/Masterminds/squirrel"
 )
 
 type User struct {
@@ -25,10 +28,22 @@ func UserRegister(ctx context.Context, login string, password string, pool *pgxp
 
 		var user User
 
-    query := `INSERT INTO users (login, password) VALUES ($1, $2) RETURNING id`
-		err = pool.QueryRow(ctx, query, login, hashedPassword).Scan(&user.ID)
+		sql, args, err := squirrel.Insert("users").
+				Columns("login", "password", "created_at").
+		    Values(login, hashedPassword, time.Now().UTC()).
+		    Suffix("RETURNING id").
+		    PlaceholderFormat(squirrel.Dollar).
+		    ToSql()
 
 		if err != nil {
+			  fmt.Println(err)
+				return 0, err
+		}
+
+		err = pool.QueryRow(ctx, sql, args...).Scan(&user.ID)
+
+		if err != nil {
+			  fmt.Println(err)
         var pgErr *pgconn.PgError
 
         if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {

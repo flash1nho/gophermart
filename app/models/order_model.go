@@ -9,6 +9,7 @@ import (
     "github.com/jackc/pgx/v5/pgxpool"
     "github.com/jackc/pgx/v5/pgconn"
     "github.com/jackc/pgerrcode"
+    "github.com/Masterminds/squirrel"
 )
 
 type OrderStatus string
@@ -43,8 +44,18 @@ func OrderCreate(ctx context.Context, number string, userID int, pool *pgxpool.P
 
     var order Order
 
-    query = `INSERT INTO orders (number, user_id, uploaded_at) VALUES ($1, $2, $3) RETURNING number`
-    err = pool.QueryRow(ctx, query, number, userID, time.Now().UTC()).Scan(&order.Number)
+    sql, args, err := squirrel.Insert("orders").
+        Columns("number", "user_id", "uploaded_at").
+        Values(number, userID, time.Now().UTC()).
+        Suffix("RETURNING number").
+        PlaceholderFormat(squirrel.Dollar).
+        ToSql()
+
+    if err != nil {
+        return "0", err
+    }
+
+    err = pool.QueryRow(ctx, sql, args...).Scan(&order.Number)
 
     if err != nil {
         var pgErr *pgconn.PgError

@@ -5,6 +5,7 @@ import (
 		"encoding/json"
 		"fmt"
 		"net/http"
+		"net/url"
 		"time"
 
 		"github.com/flash1nho/go-musthave-diploma-tpl/app/models"
@@ -19,7 +20,20 @@ type Order struct {
 		Accrual *float64 `json:"accrual,omitempty"`
 }
 
-func AccrualWorker(ctx context.Context, orderChan <-chan string, accrualURL string, userID int, log *zap.Logger, pool *pgxpool.Pool) {
+func Run(AccrualURL string, userID int, orderNumber string, log *zap.Logger, pool *pgxpool.Pool) {
+    orderChan := make(chan string, 10)
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+
+    go accrualWorker(ctx, orderChan, AccrualURL, userID, log, pool)
+
+    orderChan <- orderNumber
+
+    close(orderChan)
+    time.Sleep(1 * time.Second)
+}
+
+func accrualWorker(ctx context.Context, orderChan <-chan string, accrualURL string, userID int, log *zap.Logger, pool *pgxpool.Pool) {
 		client := &http.Client{
 				Timeout: 5 * time.Second,
 		}
@@ -37,8 +51,8 @@ func AccrualWorker(ctx context.Context, orderChan <-chan string, accrualURL stri
 }
 
 func processOrder(ctx context.Context, client *http.Client, baseURL string, orderNumber string, userID int, log *zap.Logger, pool *pgxpool.Pool) {
-		url := fmt.Sprintf("%s/api/orders/%s", baseURL, orderNumber)
-		resp, err := client.Get(url)
+		requestURL, _ := url.JoinPath(baseURL, "/api/orders/", orderNumber)
+		resp, err := client.Get(requestURL)
 
 		if err != nil {
 				log.Error(fmt.Sprintf("ошибка запроса заказа %s: %v", orderNumber, err))

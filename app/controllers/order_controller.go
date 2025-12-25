@@ -7,10 +7,10 @@ import (
     "io"
     "time"
     "strconv"
-    "context"
+
+    h "github.com/flash1nho/go-musthave-diploma-tpl/app/helpers"
 
     "github.com/flash1nho/go-musthave-diploma-tpl/app/models"
-    "github.com/flash1nho/go-musthave-diploma-tpl/app/helpers"
     "github.com/flash1nho/go-musthave-diploma-tpl/app/workers"
 
     "github.com/jackc/pgx/v5/pgxpool"
@@ -35,8 +35,7 @@ func (controller *OrderController) PostOrders(w http.ResponseWriter, r *http.Req
     body, err := io.ReadAll(r.Body)
 
     if err != nil {
-        http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
-        controller.Log.Error(fmt.Sprint(err))
+        h.JSONError(w, "неверный формат запроса", http.StatusBadRequest)
         return
     }
 
@@ -45,74 +44,61 @@ func (controller *OrderController) PostOrders(w http.ResponseWriter, r *http.Req
     orderNumber := string(body)
 
     if orderNumber == "" {
-        http.Error(w, "неверный формат запроса", http.StatusBadRequest)
+        h.JSONError(w, "неверный формат запроса", http.StatusBadRequest)
         return
     }
 
     digitOrderNumber, err := strconv.Atoi(orderNumber)
 
     if err != nil {
-        http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
+        h.JSONError(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
         controller.Log.Error(fmt.Sprint(err))
         return
     }
 
     if !luhn.Valid(digitOrderNumber) {
-        http.Error(w, "неверный формат номера заказа", http.StatusUnprocessableEntity)
+        h.JSONError(w, "неверный формат номера заказа", http.StatusUnprocessableEntity)
         return
     }
 
     ctx := r.Context()
-    userID := helpers.GetUserIDFromContext(ctx)
+    userID := h.GetUserIDFromContext(ctx)
     orderNumber, err = models.OrderCreate(ctx, orderNumber, userID, controller.Pool)
 
     if err != nil {
-        http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
+        h.JSONError(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
         controller.Log.Error(fmt.Sprint(err))
         return
     }
 
     if orderNumber == "0" {
-        w.WriteHeader(http.StatusOK)
-        fmt.Fprintln(w, "номер заказа уже был загружен этим пользователем")
+        h.JSONError(w, "номер заказа уже был загружен этим пользователем", http.StatusOK)
         return
     } else if orderNumber == "-1" {
-        w.WriteHeader(http.StatusConflict)
-        fmt.Fprintln(w, "номер заказа уже был загружен другим пользователем")
+        h.JSONError(w, "номер заказа уже был загружен другим пользователем", http.StatusConflict)
         return
     }
 
-    orderChan := make(chan string, 10)
-    ctx, cancel := context.WithCancel(context.Background())
-    defer cancel()
+    workers.Run(controller.AccrualURL, userID, orderNumber, controller.Log, controller.Pool)
 
-    go workers.AccrualWorker(ctx, orderChan, controller.AccrualURL, userID, controller.Log, controller.Pool)
-
-    orderChan <- orderNumber
-
-    close(orderChan)
-    time.Sleep(1 * time.Second)
-
-    w.WriteHeader(http.StatusAccepted)
-    fmt.Fprintln(w, "новый номер заказа принят в обработку")
+    h.JSONSuccess(w, "новый номер заказа принят в обработку", http.StatusAccepted)
 }
 
 func (controller *OrderController) GetOrders(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
 
     ctx := r.Context()
-    userID := helpers.GetUserIDFromContext(ctx)
+    userID := h.GetUserIDFromContext(ctx)
     orders, err := models.OrderList(ctx, userID, controller.Pool)
 
     if err != nil {
-        http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
+        h.JSONError(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
         controller.Log.Error(fmt.Sprint(err))
         return
     }
 
     if len(orders) == 0 {
-        w.WriteHeader(http.StatusNoContent)
-        fmt.Fprintln(w, "нет данных для ответа")
+        h.JSONError(w, "нет данных для ответа", http.StatusNoContent)
         return
     }
 

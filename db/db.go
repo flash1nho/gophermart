@@ -45,7 +45,7 @@ func connect(databaseURI string) (*pgxpool.Pool, error) {
 				return nil, fmt.Errorf("ошибка подключения к базе данных: %w", err)
 		}
 
-		err = pool.Ping(context.TODO())
+		err = pool.Ping(context.Background())
 
 		if err != nil {
 				return nil, fmt.Errorf("ошибка пинга базы данных: %w", err)

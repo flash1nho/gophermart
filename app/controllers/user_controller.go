@@ -5,8 +5,9 @@ import (
     "net/http"
     "encoding/json"
 
+    h "github.com/flash1nho/go-musthave-diploma-tpl/app/helpers"
+
     "github.com/flash1nho/go-musthave-diploma-tpl/app/models"
-    "github.com/flash1nho/go-musthave-diploma-tpl/app/helpers"
 
     "github.com/jackc/pgx/v5/pgxpool"
     "go.uber.org/zap"
@@ -30,8 +31,7 @@ func (controller *UserController) Register(w http.ResponseWriter, r *http.Reques
     err := json.NewDecoder(r.Body).Decode(&user)
 
     if err != nil {
-        http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
-        controller.Log.Error(fmt.Sprint(err))
+        h.JSONError(w, "неверный формат запроса", http.StatusBadRequest)
         return
     }
 
@@ -43,27 +43,25 @@ func (controller *UserController) Register(w http.ResponseWriter, r *http.Reques
     userID, err := models.UserRegister(r.Context(), user.Login, user.Password, controller.Pool)
 
     if err != nil {
-        http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
+        h.JSONError(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
         controller.Log.Error(fmt.Sprint(err))
         return
     }
 
     if userID == 0 {
-        w.WriteHeader(http.StatusConflict)
-        fmt.Fprintln(w, "логин уже занят")
+        h.JSONError(w, "логин уже занят", http.StatusConflict)
         return
     }
 
-    err = helpers.SetSignedCookie(userID, w)
+    err = h.SetSignedCookie(userID, w)
 
     if err != nil {
-        http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
+        h.JSONError(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
         controller.Log.Error(fmt.Sprint(err))
         return
     }
 
-    w.WriteHeader(http.StatusOK)
-    fmt.Fprintln(w, "пользователь успешно зарегистрирован и аутентифицирован")
+    h.JSONSuccess(w, "пользователь успешно зарегистрирован и аутентифицирован", http.StatusOK)
 }
 
 func (controller *UserController) Login(w http.ResponseWriter, r *http.Request) {
@@ -74,38 +72,35 @@ func (controller *UserController) Login(w http.ResponseWriter, r *http.Request) 
     err := json.NewDecoder(r.Body).Decode(&user)
 
     if err != nil {
-        http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
-        controller.Log.Error(fmt.Sprint(err))
+        h.JSONError(w, "неверный формат запроса", http.StatusBadRequest)
         return
     }
 
     if user.Login == "" || user.Password == "" {
-        http.Error(w, "неверный формат запроса", http.StatusBadRequest)
+        h.JSONError(w, "неверный формат запроса", http.StatusBadRequest)
         return
     }
 
     userID, err := models.UserLogin(r.Context(), user.Login, user.Password, controller.Pool)
 
     if err != nil {
-        http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
+        h.JSONError(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
         controller.Log.Error(fmt.Sprint(err))
         return
     }
 
     if userID == 0 {
-        w.WriteHeader(http.StatusUnauthorized)
-        fmt.Fprintln(w, "неверная пара логин/пароль")
+        h.JSONError(w, "неверная пара логин/пароль", http.StatusUnauthorized)
         return
     }
 
-    err = helpers.SetSignedCookie(userID, w)
+    err = h.SetSignedCookie(userID, w)
 
     if err != nil {
-        http.Error(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
+        h.JSONError(w, "внутренняя ошибка сервера", http.StatusInternalServerError)
         controller.Log.Error(fmt.Sprint(err))
         return
     }
 
-    w.WriteHeader(http.StatusOK)
-    fmt.Fprintln(w, "пользователь успешно аутентифицирован")
+    h.JSONSuccess(w, "пользователь успешно аутентифицирован", http.StatusOK)
 }

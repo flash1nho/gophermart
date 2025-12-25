@@ -2,6 +2,7 @@ package helpers
 
 import (
     "net/http"
+    "encoding/json"
     "context"
 
     "github.com/flash1nho/go-musthave-diploma-tpl/middlewares"
@@ -33,4 +34,14 @@ func GetUserIDFromContext(ctx context.Context) int {
     userID, _ := ctx.Value(middlewares.CtxUserKey).(int)
 
     return userID
+}
+
+func JSONError(w http.ResponseWriter, message string, code int) {
+    w.WriteHeader(code)
+    json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
+func JSONSuccess(w http.ResponseWriter, message string, code int) {
+    w.WriteHeader(code)
+    json.NewEncoder(w).Encode(map[string]string{"success": message})
 }
